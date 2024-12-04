@@ -26,11 +26,8 @@ io.on('connection', (socket) => {
 
     // Ajout de la gestion de modification de message
     socket.on('editMessage', (data) => {
-        // Diffuser le message modifié à tous les clients
-        socket.broadcast.emit('messageEdited', {
-            messageId: data.messageId,
-            newContent: data.newContent
-        });
+        // Émettre l'événement à tous les clients sauf l'émetteur
+        socket.broadcast.emit('editMessage', data);
     });
 
     // Ajout de la gestion de suppression de message
@@ -46,6 +43,12 @@ io.on('connection', (socket) => {
             replyTo: data.replyTo,
             message: data.message
         });
+    });
+
+    socket.on("deleteMessageForEveryone", (messageId) => {
+        // Logique pour supprimer le message de la base de données ou de la mémoire
+        // Émettre un événement à tous les clients pour mettre à jour leur affichage
+        socket.broadcast.emit("messageDeleted", messageId);
     });
 
     socket.on('disconnect', () => {
