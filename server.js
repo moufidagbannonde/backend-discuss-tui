@@ -24,6 +24,30 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('message', message);
     });
 
+    // Ajout de la gestion de modification de message
+    socket.on('editMessage', (data) => {
+        // Diffuser le message modifié à tous les clients
+        socket.broadcast.emit('messageEdited', {
+            messageId: data.messageId,
+            newContent: data.newContent
+        });
+    });
+
+    // Ajout de la gestion de suppression de message
+    socket.on('deleteMessage', (messageId) => {
+        // Informer tous les clients de la suppression
+        socket.broadcast.emit('messageDeleted', messageId);
+    });
+
+    // Ajout de la gestion des réponses aux messages
+    socket.on('replyMessage', (data) => {
+        // Diffuser la réponse à tous les clients
+        socket.broadcast.emit('messageReplied', {
+            replyTo: data.replyTo,
+            message: data.message
+        });
+    });
+
     socket.on('disconnect', () => {
         console.log('Un utilisateur est déconnecté');
     });
