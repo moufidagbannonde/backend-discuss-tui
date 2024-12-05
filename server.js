@@ -2,7 +2,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-
+const Message = require("./model/Message")
 
 const app = express();
 const server = http.createServer(app);
@@ -46,9 +46,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on("deleteMessageForEveryone", (messageId) => {
-        // Logique pour supprimer le message de la base de données ou de la mémoire
-        // Émettre un événement à tous les clients pour mettre à jour leur affichage
-        socket.broadcast.emit("messageDeleted", messageId);
+        // Émettre un événement à tous les clients pour supprimer le message
+        io.emit("messageDeleted", messageId);
+      });
+
+    socket.on("deleteMessage", (messageId) => {
+        // Émettre un événement uniquement à l'utilisateur qui a demandé la suppression
+        socket.emit("messageDeleted", messageId);
     });
 
     socket.on('disconnect', () => {
