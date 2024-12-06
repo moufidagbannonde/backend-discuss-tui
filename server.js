@@ -3,7 +3,13 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const Message = require("./model/Message")
+const mongoose = require("mongoose");
+const { v4: uuidv4 } = require("uuid");
 
+
+async  function connectToMongo(){
+    await mongoose.connect("mongodb://localhost:27017/chat");
+}
 const app = express();
 const server = http.createServer(app);
 const io = require('socket.io')(server, {
@@ -15,13 +21,25 @@ const io = require('socket.io')(server, {
 });
 app.use(cors());
 
+// ajouter le message en base de données
 
 io.on('connection', (socket) => {
     console.log("Un utilisateur est connecté");
 
-    socket.on('message', (message) => {
+    socket.on('message', async (message) => {
         // Diffuser le message à tous les autres clients
         socket.broadcast.emit('message', message);
+        await connectToMongo();
+        
+        // Ajouter le champ isMe au message
+        const messageWithIsMe = {
+            ...message,
+            isMe: true ,
+            conversationId: uuidv4()
+        };
+
+        // ajouter le message en base de données
+        Message.create(messageWithIsMe);
     });
 
     // Ajout de la gestion de modification de message
@@ -31,9 +49,22 @@ io.on('connection', (socket) => {
     });
 
     // Ajout de la gestion de suppression de message
-    socket.on('deleteMessage', (messageId) => {
-        // Informer tous les clients de la suppression
-        socket.broadcast.emit('messageDeleted', messageId);
+    socket.on('deleteMessage', async (data) => {
+        // se connecter à la base de données
+        await connectToMongo();
+        
+        const { text, userId } = data;
+
+        // supprimer le message en base de données en utilisant le texte et l'ID de l'utilisateur
+        const result = await Message.findOneAndDelete({ text, userId });
+
+        if (result) {
+            console.log("Message supprimé avec succès :", result);
+            // Informer tous les clients de la suppression
+            io.emit('messageDeleted', result._id); // Émettre l'ID du message supprimé à tous les clients
+        } else {
+            console.log("Aucun message trouvé à supprimer.");
+        }
     });
 
     // Ajout de la gestion des réponses aux messages
