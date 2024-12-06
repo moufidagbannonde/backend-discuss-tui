@@ -54,7 +54,7 @@ io.on('connection', (socket) => {
         console.log("message modifié", result);
 
         if (result) {
-            socket.broadcast.emit("messageEdited", result); // Émettre l'événement avec le message modifié
+            socket.broadcast.emit("messageEdited", { text, userId, newContent }); // Émettre l'événement avec le message modifié
             return { message: "Message modifié avec succès :", data: result }
         } else {
             return { message: "Erreur lors de la modification du message" };
