@@ -4,8 +4,6 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const Message = require("./model/Message")
 const mongoose = require("mongoose");
-const { v4: uuidv4 } = require("uuid");
-
 
 async  function connectToMongo(){
     await mongoose.connect("mongodb://localhost:27017/chat");
@@ -35,7 +33,6 @@ io.on('connection', (socket) => {
         const messageWithIsMe = {
             ...message,
             isMe: true ,
-            conversationId: uuidv4()
         };
 
         // ajouter le message en base de données
