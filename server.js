@@ -68,13 +68,18 @@ io.on('connection', (socket) => {
 
         const { text, userId } = data;
 
-        // supprimer le message en base de données en utilisant le texte et l'ID de l'utilisateur
-        const result = await Message.findOneAndDelete({ text, userId });
+        const deletingMessage = await Message.findOne({ text, userId });
 
-        if (result) {
-            console.log("Message supprimé avec succès :", result);
-            // Informer tous les clients de la suppression
-            io.emit('messageDeleted', result._id); // Émettre l'ID du message supprimé à tous les clients
+        if (deletingMessage) {
+            const result = await deletingMessage.deleteOne();
+
+            if (result.deletedCount > 0) {
+                console.log("Message supprimé avec succès :", result);
+                // Émettre l'ID du message supprimé à tous les clients
+                socket.broadcast.emit('messageDeleted', deletingMessage._id);
+            } else {
+                console.log("Erreur lors de la suppression du message.");
+            }
         } else {
             console.log("Aucun message trouvé à supprimer.");
         }
