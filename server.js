@@ -44,29 +44,21 @@ io.on('connection', (socket) => {
     socket.on('editMessage', async (data) => {
         // se connecter à la base de données
         await connectToMongo();
-        
+
         const { text, userId, newContent } = data; // Assurez-vous que data contient text, userId et newContent
         // console.log("message à modifier", data);
-        
+
         const updatingMessage = await Message.findOne({ text, userId });
         // console.log("message trouvé", updatingMessage);
         const result = await updatingMessage.updateOne({ text: newContent })
         console.log("message modifié", result);
 
-
-        // modifier le message en base de données
-        // const result = await Message.findOneAndUpdate(
-        //     { text, userId }, // Critères de recherche
-        //     { text: newContent }, // Nouveau contenu
-        //     { new: true } // Retourner le document modifié
-        // );
-        
-        // if (result) {
-        //     socket.broadcast.emit("messageEdited", { text, userId, newContent }); // Émettre l'événement avec le message modifié
-        //     console.log("Message modifié avec succès :", result);
-        // } else {
-        //     console.log("Erreur lors de la modification du message");
-        // }
+        if (result) {
+            socket.broadcast.emit("messageEdited", result); // Émettre l'événement avec le message modifié
+            return { message: "Message modifié avec succès :", data: result }
+        } else {
+            return { message: "Erreur lors de la modification du message" };
+        }
     });
 
     // Ajout de la gestion de suppression de message
