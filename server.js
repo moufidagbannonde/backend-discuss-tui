@@ -63,20 +63,22 @@ io.on('connection', (socket) => {
 
     // Ajout de la gestion de suppression de message
     socket.on('deleteMessage', async (data) => {
-        // se connecter à la base de données
         await connectToMongo();
 
-        const { text, userId } = data;
+        const { text, userId, forEveryOne } = data;
 
         const deletingMessage = await Message.findOne({ text, userId });
-
+        console.log("message à supprimer", deletingMessage);
         if (deletingMessage) {
             const result = await deletingMessage.deleteOne();
 
             if (result.deletedCount > 0) {
                 console.log("Message supprimé avec succès :", result);
-                // Émettre l'ID du message supprimé à tous les clients
-                socket.broadcast.emit('messageDeleted', deletingMessage._id);
+                if (!forEveryOne) {
+                    socket.broadcast.emit('messageDeleted', deletingMessage._id);
+                } else {
+                    socket.broadcast.emit('deleteMessageForEveryOne', deletingMessage._id);
+                }
             } else {
                 console.log("Erreur lors de la suppression du message.");
             }
@@ -90,7 +92,8 @@ io.on('connection', (socket) => {
         // Diffuser la réponse à tous les clients
         socket.broadcast.emit('messageReplied', {
             replyTo: data.replyTo,
-            message: data.message
+            message: data.message,
+            userId: data.userId
         });
     });
 
