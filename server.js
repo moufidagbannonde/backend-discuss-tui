@@ -13,7 +13,7 @@ const app = express();
 const server = http.createServer(app);
 const io = require('socket.io')(server, {
     cors: {
-        origin: "http://localhost:5173", // URL de votre app Vue.js
+        origin: "http://localhost:5173",
         methods: ["GET", "POST"],
         credentials: true
     }
@@ -30,35 +30,41 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('message', message);
         await connectToMongo();
 
-        // Ajouter le champ isMe au message
+        // formatter le contenu de l'objet Message 
         const messageWithIsMe = {
             ...message,
             isMe: true,
+            isRead: false
         };
 
-        // ajouter le message en base de données
+        // insérer le message en base de données
         Message.create(messageWithIsMe);
     });
 
-    // Ajout de la gestion de modification de message
+    // événement pour l'édition d'un message
     socket.on('editMessage', async (data) => {
         // se connecter à la base de données
         await connectToMongo();
 
-        const { text, userId, newContent } = data; // Assurez-vous que data contient text, userId et newContent
+        const { text, userId, newContent } = data;
         // console.log("message à modifier", data);
 
+        // récupérer le message à modifier
         const updatingMessage = await Message.findOne({ text, userId });
-        // console.log("message trouvé", updatingMessage);
-        const result = await updatingMessage.updateOne({ text: newContent })
-        console.log("message modifié", result);
-
-        if (result) {
-            socket.broadcast.emit("messageEdited", { text, userId, newContent }); // Émettre l'événement avec le message modifié
-            return { message: "Message modifié avec succès :", data: result }
+        // mettre à jour le message récupéré
+        if (updatingMessage) {
+            const result = await updatingMessage.updateOne({ text: newContent });
+            if (result) {
+                socket.broadcast.emit("messageEdited", { text, userId, newContent });
+                return { message: "Message modifié avec succès :", data: result }
+            } else {
+                return { message: "Erreur lors de la modification du message" };
+            }
         } else {
-            return { message: "Erreur lors de la modification du message" };
+            return { message: "Message non trouvé" }
         }
+
+
     });
 
     // Ajout de la gestion de suppression de message

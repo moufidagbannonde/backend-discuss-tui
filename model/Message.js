@@ -1,14 +1,16 @@
 const mongoose = require('mongoose');
 
-// Définition du schéma de message
 const messageSchema = new mongoose.Schema({
-    isMe: { type: Boolean, required: true }, // Indique si le message a été envoyé par l'utilisateur
-    text: { type: String, required: true },  // Contenu du message
-    time: { type: Date, default: Date.now },  // Heure d'envoi du message
-    userId: { type: String, required: true }  // ID de l'utilisateur qui a envoyé le message
+    isMe: { type: Boolean, required: true }, 
+    text: { type: String, required: true },  
+    time: { type: Date, default: Date.now },  
+    userId: { type: String, required: true },
+    // conversationId: { type: String, required: true },
+    isRead: {type: Boolean, default: false},
+    // receiverId: {type: String, required: true}
 });
 
-// Création du modèle
+
 const Message = mongoose.model('Message', messageSchema);
 
 module.exports = Message; 
