@@ -4,7 +4,7 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const Message = require("./model/Message")
 const mongoose = require("mongoose");
-const { error } = require("console");
+const userSocketMap = new Map();
 
 async function connectToMongo() {
     await mongoose.connect("mongodb://localhost:27017/chat");
@@ -23,8 +23,36 @@ app.use(cors());
 // ajouter le message en base de données
 
 io.on('connection', (socket) => {
-    console.log("Un utilisateur est connecté");
 
+    // événement pour l'identification du user connecté
+    socket.on('user-connected', (userId) => {
+        console.log('Utilisateur connecté avec ID:', userId);
+        userSocketMap.set(userId, socket.id);
+        console.log('userSocketMap mis à jour:', Array.from(userSocketMap.entries()));
+    });
+
+    // événement pour l'invitation à un appel
+    socket.on('invite-to-call', (data) => {
+        const { inviteeID, roomID, callerID } = data;
+        console.log('Invitation reçue:', { inviteeID, roomID, callerID });
+        
+        const inviteeSocketId = userSocketMap.get(inviteeID);
+        if (inviteeSocketId) {
+            console.log('Envoi de l\'invitation à:', inviteeSocketId);
+            io.to(inviteeSocketId).emit('call-invitation', {
+                callerID,
+                roomID
+            });
+        } else {
+            console.log('Utilisateur non trouvé:', inviteeID);
+            // Informer l'appelant que l'utilisateur n'est pas connecté
+            socket.emit('invitation-error', {
+                message: 'Utilisateur non connecté'
+            });
+        }
+    });
+
+    // événement pour l'envoi d'un message
     socket.on('message', async (message) => {
         // Diffuser le message à tous les autres clients
         socket.broadcast.emit('message', message);
@@ -67,7 +95,7 @@ io.on('connection', (socket) => {
 
     });
 
-    // Ajout de la gestion de suppression de message
+    // événement pour la suppression de message
     socket.on('deleteMessage', async (data) => {
         await connectToMongo();
 
@@ -115,6 +143,12 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log('Un utilisateur est déconnecté');
+        for (const [userId, socketId] of userSocketMap.entries()) {
+            if (socketId === socket.id) {
+                userSocketMap.delete(userId);
+                break;
+            }
+        }
     });
 });
 
