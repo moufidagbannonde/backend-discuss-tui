@@ -98,6 +98,26 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('call-accepted', (data) => {
+        console.log('Appel accepté:', data);
+        const { from, localDescription } = data;
+        
+        // Trouver le socket de l'appelant
+        const callerSocketId = users.get(data.to);
+        if (callerSocketId) {
+            // Transmettre l'acceptation à l'appelant
+            io.to(callerSocketId).emit('call-accepted', {
+                from,
+                localDescription,
+                accepted: true
+            });
+        } else {
+            socket.emit('call-error', {
+                message: "L'appelant n'est plus connecté"
+            });
+        }
+    });
+    
     // Gestion des candidats ICE entre l'appelant et l'appelé
     socket.on('ice-candidate', (data) => {
         const targetSocketId = users.get(data.to);
