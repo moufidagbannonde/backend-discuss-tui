@@ -5,6 +5,8 @@ const cors = require("cors");
 const Message = require("./model/Message")
 const mongoose = require("mongoose");
 const userSocketMap = new Map();
+const users = new Map();
+const connections = new Map();
 
 async function connectToMongo() {
     await mongoose.connect("mongodb://localhost:27017/chat");
@@ -27,16 +29,17 @@ io.on('connection', (socket) => {
     // événement pour l'identification du user connecté
     socket.on('user-connected', (userId) => {
         console.log('Utilisateur connecté avec ID:', userId);
-        userSocketMap.set(userId, socket.id);
-        console.log('userSocketMap mis à jour:', Array.from(userSocketMap.entries()));
+        users.set(userId, socket.id);
+        socket.broadcast.emit('user-connected', userId);
+        console.log('users mis à jour:', Array.from(users.entries()));
     });
 
     // événement pour l'invitation à un appel
     socket.on('invite-to-call', (data) => {
         const { inviteeID, roomID, callerID } = data;
         console.log('Invitation reçue:', { inviteeID, roomID, callerID });
-        
-        const inviteeSocketId = userSocketMap.get(inviteeID);
+
+        const inviteeSocketId = users.get(inviteeID);
         if (inviteeSocketId) {
             console.log('Envoi de l\'invitation à:', inviteeSocketId);
             io.to(inviteeSocketId).emit('call-invitation', {
@@ -51,6 +54,151 @@ io.on('connection', (socket) => {
             });
         }
     });
+
+    socket.on('register', (data) => {
+        const userId = data.userId;
+        users.set(userId, socket.id);
+        console.log("Un utilisateur enregistré avec l'id ", userId);
+    });
+    // Remplacer les événements WebRTC existants par ceux-ci
+    socket.on("call-offer", (data) => {
+        const targetSocketId = users.get(data.to);
+        if (targetSocketId) {
+            console.log(`Envoi de call-offer à ${data.to} avec vidéo: ${data.withVideo}`);
+            // Stocker temporairement les informations d'appel
+            const callInfo = {
+                from: data.from,
+                to: data.to,
+                withVideo: data.withVideo,
+                status: 'pending'
+            };
+            io.to(targetSocketId).emit("call-offer", {
+                ...data,
+                callInfo
+            });
+        }
+    });
+
+    socket.on('call-answer', (data) => {
+        console.log('Call-answer event received:', data);
+        console.log('Searching target user in users map:', data.to, users.get(data.to));
+        const targetSocketId = users.get(data.to);
+
+        if (targetSocketId) {
+            console.log(`Forwarding call-answer to socket: ${targetSocketId}`);
+            io.to(targetSocketId).emit("call-answer", data);
+            // Envoyer une confirmation à l'émetteur
+            socket.emit('call-answer-received', { success: true });
+        } else {
+            console.error(`Target socket not found for user: ${data.to}`);
+            socket.emit('call-answer-received', {
+                success: false,
+                error: 'Target user not found'
+            });
+        }
+    });
+
+    // Gestion des candidats ICE entre l'appelant et l'appelé
+    socket.on('ice-candidate', (data) => {
+        const targetSocketId = users.get(data.to);
+        if (targetSocketId) {
+            console.log(`Envoi de ICE candidate de ${data.from} à ${data.to}`);
+            io.to(targetSocketId).emit('ice-candidate', data);
+        }
+    });
+    // Evénement de fin d'appel
+    socket.on('call-ended', (data) => {
+        const targetSocketId = users.get(data.to);
+        if (targetSocketId) {
+            console.log(`Appel terminé entre ${data.from} et ${data.to}`);
+            io.to(targetSocketId).emit('call-ended', data);
+            // Notifier également l'appelant
+            socket.emit('call-ended-confirmation', data);
+        }
+    });
+
+    /**
+     * événements de partage d'écran
+     */
+
+    // agent prêt à partager son écran
+    socket.on('agent-ready', ({ agentId }) => {
+        console.log(`Agent ${agentId} ready to share screen`);
+        connections.set(agentId, socket.id);
+        socket.broadcast.emit('agent-available', { agentId });
+    });
+
+    //  superviseur prêt à observer un agent
+    socket.on('supervisor-connect', ({ agentId }) => {
+        const agentSocketId = connections.get(agentId);
+        if (agentSocketId) {
+            io.to(agentSocketId).emit('supervisor-ready');
+        }
+    });
+
+    // offre de partage d'écran
+    socket.on('screen-offer', ({ agentId, offer }) => {
+        socket.broadcast.emit('screen-offer', { agentId, offer });
+    });
+
+    //  réponse du superviseur
+    socket.on('screen-answer', ({ agentId, answer }) => {
+        const agentSocketId = connections.get(agentId);
+        if (agentSocketId) {
+            io.to(agentSocketId).emit('screen-answer', answer);
+        }
+    });
+
+    // // Gérer les candidats ICE pour le partage d'écran
+    // socket.on('ice-candidate', ({ agentId, candidate }) => {
+    //     socket.broadcast.emit('ice-candidate', candidate);
+    // });
+
+    // Gérer l'arrêt du partage d'écran
+    socket.on('screen-share-stopped', () => {
+        // Trouver l'agentId associé à ce socket
+        let agentId = null;
+        for (const [id, socketId] of connections.entries()) {
+            if (socketId === socket.id) {
+                agentId = id;
+                break;
+            }
+        }
+
+        if (agentId) {
+            socket.broadcast.emit('screen-share-ended', { agentId });
+            connections.delete(agentId);
+        }
+    });
+
+    // Ajouter cet événement pour gérer la déconnexion
+    socket.on('disconnect', () => {
+        let disconnectedUserId = null;
+        for (const [userId, socketId] of users.entries()) {
+            if (socketId === socket.id) {
+                disconnectedUserId = userId;
+                users.delete(userId);
+                // Notifier les autres utilisateurs de la déconnexion
+                socket.broadcast.emit('user-disconnected', {
+                    userId: disconnectedUserId
+                });
+                break;
+            }
+        }
+        console.log(`Utilisateur déconnecté: ${disconnectedUserId}`);
+    });
+
+    // socket.on('disconnect', () => {
+    //     // Remove user from users map
+    //     for (const [userId, socketId] of users.entries()) {
+    //         if (socketId === socket.id) {
+    //             users.delete(userId);
+    //             break;
+    //         }
+    //     }
+    // });
+
+
 
     // événement pour l'envoi d'un message
     socket.on('message', async (message) => {
@@ -143,9 +291,9 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log('Un utilisateur est déconnecté');
-        for (const [userId, socketId] of userSocketMap.entries()) {
+        for (const [userId, socketId] of users.entries()) {
             if (socketId === socket.id) {
-                userSocketMap.delete(userId);
+                users.delete(userId);
                 break;
             }
         }
